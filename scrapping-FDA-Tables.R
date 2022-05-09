@@ -5,6 +5,13 @@ library(dplyr)
 library(janitor)
 library(udpipe)
 library(lattice)
+library(plotly)
+library(crosstalk)
+library(data.table)
+library(lubridate)
+library(tidyr)
+library(viridis)
+
 
 # scrapping html tables of novel drug approvals from FDA website
 x = seq(2015,2022)
@@ -99,30 +106,64 @@ for (word in words){
 }
 
 
-## filtering empty rows and manually fixing a glitch causing one deviated row in 2020 approvals
+## filtering empty rows and manually fixing a glitch causing one deviated row in 2020 approvals and wrong entry (2028 vs 2018)
 
 df = df %>%  mutate (approval_date = case_when(drug_name == 'Ebanga'~'12/21/2020',  T ~ approval_date ) , fda_approved_use_on_approval_date = case_when(drug_name == 'Ebanga' ~ 'To treat ebola', T ~ fda_approved_use_on_approval_date), indication = case_when(drug_name == 'Ebanga' ~ 'Ebola', T ~ indication ))
 
+df = df %>%  mutate (approval_date = case_when(drug_name == 'Firdapse'~'11/28/2018',  T ~ approval_date))
 
 df = df %>% filter(!is.na(indication)) 
 
 
 
-
+#Categorizing drugs
  
-test = df %>%  mutate(condition = case_when(
-      str_detect(indication, 'oma|cancer|tumor|chemotherapy-induced nausea|leukemia|carcinoid syndrome diarrhea|neoplasm|myelofibrosis|myelodysplastic',  negate = F) ~ 'Cancers',
-      str_detect(fda_approved_use_on_approval_date, 'graft-versus-host|hemophilia A|paroxysmal nocturnal hemoglobinuria|hypophosphatasia|angioedema|Pompe disease|rare|neuromyelitis|von Hippel-Lindau|agglutinin disease|molybdenum|polycythemia vera') ~ 'rare', str_detect(indication, 'blood-thinning|vasculitis|heart|high cholesterol|cardio|hypercholesterolemia|hyperkalemia|hypertension|thromboembolism|blood clots', negate = F) ~ 'Cardiovascular diseases',
-      str_detect(indication, 'anthrax|infection|bacterial vaginosis|septic|Chagas disease|impetigo|candidiasis|trypanosomiasis', negate = F) ~ 'Infectious diseases', str_detect(indication, 'chronic idiopathic constipation|Chronic Idiopathic Constipation|irritable bowel syndrome|opioid-induced constipation|travelers’ diarrhea') ~ 'Digestive diseases', str_detect(indication, 'asthma|COPD|cystic fibrosis', negate = F) ~ 'Respiratory diseases',
+final_df = df %>%  mutate(condition = case_when(
+      str_detect(indication, 'oma|cancer|tumor|chemotherapy-induced nausea|leukemia|carcinoid syndrome diarrhea|neoplasm|myelofibrosis|myelodysplastic',  negate = F) ~ 'Neoplasms',
+      str_detect(fda_approved_use_on_approval_date, 'long-chain fatty acid oxidation|hemophagocytic lymphohistiocytosis|hyperoxaluria|Lambert-Eaton myasthenic syndrome|onchocerciasis|Adenosine Deaminase-Severe Combined Immunodeficiency|graft-versus-host|hemophilia A|paroxysmal nocturnal hemoglobinuria|hypophosphatasia|angioedema|Pompe disease|rare|neuromyelitis|von Hippel-Lindau|agglutinin disease|molybdenum|polycythemia vera|Fabry disease|thrombotic thrombocytopenic purpura') ~ 'rare', str_detect(indication, 'blood-thinning|vasculitis|heart|high cholesterol|cardio|hypercholesterolemia|hyperkalemia|hypertension|thromboembolism|blood clots', negate = F) ~ 'Cardiovascular diseases',
+      str_detect(indication, 'head lice|anthrax|infection|bacterial vaginosis|septic|Chagas disease|impetigo|candidiasis|trypanosomiasis|fascioliasis', negate = F) ~ 'Infectious diseases', str_detect(indication, 'chronic idiopathic constipation|Chronic Idiopathic Constipation|irritable bowel syndrome|opioid-induced constipation|travelers’ diarrhea') ~ 'Digestive diseases', str_detect(indication, 'asthma|COPD|cystic fibrosis', negate = F) ~ 'Respiratory diseases',
       str_detect(indication, 'HIV') ~ 'HIV/AIDS', str_detect(indication, 'malaria') ~ 'Malaria',   str_detect(indication, 'Growth hormone|hyperparathyroidism|growth hormone|hypoparathyroidism|endometriosis|gout|Cushing') ~ 'Endocrine diseases',
-      str_detect(indication, 'tuberculosis' ) ~ 'Tuberculosis',  str_detect(indication, 'hepatitis C' ) ~ 'Hepatitis',  str_detect(indication, 'neuromuscular|muscular atrophy|schizophrenia|multiple sclerosis|amyotrophic lateral sclerosis|dyskinesia|muscular dystrophy|epilepsy|seizures|sleepiness|insomnia|deficit hyperactivity|myasthenia gravis' , negate = F) ~ 'Neurological diseases', 
+      str_detect(indication, 'tuberculosis' ) ~ 'Tuberculosis',  str_detect(indication, 'hepatitis C' ) ~ 'Hepatitis',  str_detect(indication, 'neuromuscular|muscular atrophy|schizophrenia|multiple sclerosis|amyotrophic lateral sclerosis|dyskinesia|muscular dystrophy|epilepsy|seizures|sleepiness|opioid withdrawal symptoms|insomnia|deficit hyperactivity|myasthenia gravis|postpartum depression' , negate = F) ~ 'Neurological conditions', 
       str_detect(indication, 'acne|eczema|psoriasis|phototoxic reactions|atopic dermatitis|smallpox|lupus erythematousus|pruritus' , negate = F ) ~ 'Skin diseases',  str_detect(indication, 'bacterial pneumonia' ) ~ 'Lower respiratory infections', str_detect(indication, 'diabetes|hypoglycemia|diabetic macular edema|glycemic control|polyneuropathy', negate = F) ~ 'Diabetes', 
       str_detect(indication, 'chronic liver disease|hepatic veno-occlusive|cholestasis|bile acid synthesis disorders' , negate = F) ~ 'Liver diseases', str_detect(indication, 'Parkinson' ) ~ "Parkinson's disease",  str_detect(indication, 'osteoporosis|arthritis' , negate = F) ~ 'Skeletal diseases', str_detect(indication, 'migraine' ) ~ 'Migraine',
-      str_detect(indication, 'influenza' ) ~ 'Flu', str_detect(indication, 'neurotrophic keratitis|dry eye|Keratosis|macular degeneration|eye surgery|Thyroid eye disease',  negate = F ) ~ 'Eye diseases', str_detect(indication, 'anemia|sickle cell|thrombocytopenia',  negate = F ) ~ 'Blood diseases', str_detect(indication, 'Alzheimer',  negate = F ) ~ "Alzheimer's disease and other dementias",
-      str_detect(indication, 'nephritis' ) ~ 'Kidney disease', str_detect(indication, 'mucopolysaccharidosis|Batten disease|achondroplasia|chorea', negate = F ) ~ 'Genetic diseases', str_detect(indication, 'hypoactive sexual desire disorder| infertility', negate = F ) ~ 'Sexual dysfunction',
-      F ~ indication
-))
+      str_detect(indication, 'influenza' ) ~ 'Flu', str_detect(indication, 'neurotrophic keratitis|dry eye|Keratosis|macular degeneration|eye surgery|Thyroid eye disease',  negate = F ) ~ 'Eye diseases', str_detect(indication, 'anemia|sickle cell|thrombocytopenia',  negate = F ) ~ 'Blood diseases', str_detect(indication, 'Alzheimer') ~ "Alzheimer's disease and other dementias",
+      str_detect(indication, 'nephritis|overactive bladder' ) ~ 'Kidney disease', str_detect(indication, 'mucopolysaccharidosis|Batten disease|achondroplasia|chorea|aciduria', negate = F ) ~ 'Genetic diseases', str_detect(indication, 'hypoactive sexual desire disorder| infertility', negate = F ) ~ 'Sexual dysfunction', str_detect(indication, 'glabellar lines|submental fat',  negate = F ) ~ "Dermalogic aesthetics",
+      str_detect(indication, 'COVID' ) ~ 'COVID', str_detect(indication, 'pregnancy' ) ~ 'Birth Control', str_detect(indication, 'pain' ) ~ 'Analgesics', str_detect(indication, 'ebola|Ebola' ,  negate = F  ) ~ 'Ebola', str_detect(indication, 'sedation' ) ~ 'Sedation', str_detect(indication, 'nausea and vomiting after surgery' ) ~ 'Postoperative Nausea and Vomiting',
+      F ~ indication), Year = year(mdy(approval_date)))
 
 
-ts = test %>% filter(is.na(condition)) 
-     
+
+r = final_df %>%  group_by(condition) %>% count 
+
+# graphing number of drugs by category
+
+dfig4 <- crosstalk::SharedData$new(final_df)$data() %>%
+  group_by(condition, Year) %>% count 
+
+
+dfig4 %>% plot_ly(x = ~n, y = ~condition, color = ~Year, type = 'bar',  orientation = 'h') %>% layout(title = "Novel Drugs Approvals by FDA (2015-2022)",
+    xaxis = list(title = "count"), yaxis = list(categoryorder = "total ascending",title = "condition"))
+                     
+
+
+# graphing number of drugs by category (top categories)
+dfig5 <- crosstalk::SharedData$new(final_df)$data() %>%
+  group_by(condition, Year) %>%
+  count %>% filter(condition %in% c('Cardiovascular diseases', 'Neoplasms', 'Neurological conditions', 'Infectious diseases', 'Digestive diseases', 'Lower respiratory infections', 'rare', 'Diabetes mellitus'))
+
+
+dfig5 %>% plot_ly(x = ~n, y = ~condition, color = ~Year, type = 'bar',  orientation = 'h') %>% layout(title = "Novel Drugs Approvals by FDA (2015-2022)",
+                                                                                                      xaxis = list(title = "count"), yaxis = list(categoryorder = "total ascending",title = "condition"))
+
+
+# graphing percentage of drug categories
+perdrug = final_df %>% group_by(condition) %>%
+  summarise(drugsnumber = n()) %>% mutate(perc = round(drugsnumber/sum(drugsnumber)*100, digits = 2)) %>% arrange(desc(perc)) %>% head(10)
+                                                                              
+graph2 = perdrug %>% plot_ly(x = ~condition, y = ~perc, color = ~condition, text = ~perc, textposition = 'top', insidetextfont = list(size=10, color = 'black'), type = 'bar') %>% layout(title = "Novel Drugs Approvals by FDA (2015-2022)",
+                                                                                            xaxis = list(categoryorder = "total descending", title = "condition"), yaxis = list(title = "percentage"))
+
+
+
+
+
